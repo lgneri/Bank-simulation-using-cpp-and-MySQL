@@ -1,5 +1,8 @@
-#include <typeinfo>
+/** Arquivo Database.cpp. Trabalho final EEL670 2022.2
+*   Aluno: Luis Guilherme Neri Ferreira */
+
 #include <map>
+#include <vector>
 #include <string.h>
 #include "Database.h"
 
@@ -8,9 +11,8 @@ using namespace std;
 Database::Database() {}
 
 MYSQL* Database::connect() {
-    MYSQL* connection = mysql_init(NULL); // mysql instance
+    MYSQL* connection = mysql_init(NULL);
 
-    //connect database
     if(!mysql_real_connect(connection, server, user, password, database, 0, NULL, 0)){
         cout << "Connection Error: " << mysql_error(connection) << endl;
         exit(1);
@@ -20,7 +22,6 @@ MYSQL* Database::connect() {
 }
 
 MYSQL_RES* Database::performQuery(MYSQL* connection, const char* query) {
-    //send query to db
     if(mysql_query(connection, query)) {
         cout << "MySQL Query Error: " << mysql_error(connection) << endl;
         exit(1);
@@ -54,8 +55,10 @@ bool Database::correctPassword(MYSQL* connection, int CPF, const char* password)
     sprintf(query, "SELECT password FROM Accounts WHERE CPF=%i;", CPF);
     MYSQL_RES* res = performQuery(connection, query);
 
-    if (strcmp(mysql_fetch_row(res)[0], password) != 0)
+    if (strcmp(mysql_fetch_row(res)[0], password) != 0) {
+        mysql_free_result(res);
         throw runtime_error("Error: Incorrect password.");
+    }
 
     mysql_free_result(res);
 
@@ -72,7 +75,6 @@ map<string, char*> Database::getClientInfo(MYSQL* connection, int CPF) {
     res = performQuery(connection, query);
     row = mysql_fetch_row(res);
 
-    clientInfo["CPF"] = row[0];
     clientInfo["fullName"] = row[1];
     clientInfo["password"] = row[2];
     clientInfo["cashInHands"] = row[3];
@@ -92,59 +94,108 @@ void Database::modify(MYSQL* connection, int CPF, const char* collumn, float val
 }
 
 void Database::cashTransaction(MYSQL* connection, int CPF, float value) {
-    MYSQL_RES* res;
-    float inHands;
+    map<string, char*> clientInfo;
+    float cashInHands;
     float balance;
-    char query[1024];
 
-    sprintf(query, "SELECT cashInHands FROM Accounts WHERE CPF=%i;", CPF);
-    res = performQuery(connection, query);
-    inHands = atof(mysql_fetch_row(res)[0]);
-    mysql_free_result(res);
+    clientInfo = getClientInfo(connection, CPF);
+    cashInHands = atof(clientInfo["cashInHands"]);
+    balance = atof(clientInfo["balance"]);
 
-    if (value > inHands)
+    if (value > cashInHands)
         throw runtime_error("Error: You must have in hands the amount of money you are trying to deposit.");
-
-    inHands -= value;
-
-    sprintf(query, "SELECT balance FROM Accounts WHERE CPF=%i;", CPF);
-    res = performQuery(connection, query);
-    balance = atof(mysql_fetch_row(res)[0]);
 
     if (value < balance * -1)
         throw runtime_error("Error: Cannot withdraw more money than you have in your account.");
 
+    cashInHands -= value;
     balance += value;
-    mysql_free_result(res);
 
     modify(connection, CPF, "balance", balance);
-    modify(connection, CPF, "cashInHands", inHands);
+    modify(connection, CPF, "cashInHands", cashInHands);
 }
 
 void Database::pix(MYSQL* connection, int from, int to, float value) {
-    MYSQL_RES* res;
+    map<string, char*> clientInfo;
     float balance;
-    char query[1024];
 
     if (!clientExists(connection, to))
         throw runtime_error("Error: CPF youre trying to send money to doesnt have an account.");
 
-    sprintf(query, "SELECT balance FROM Accounts WHERE CPF=%i;", from);
-    res = performQuery(connection, query);
-    balance = atof(mysql_fetch_row(res)[0]);
+    clientInfo = getClientInfo(connection, from);
+    balance = atof(clientInfo["balance"]);
 
     if (value > balance)
         throw runtime_error("Error: Cannot send more money than you have in your account.");
 
     balance -= value;
-    mysql_free_result(res);
     modify(connection, from, "balance", balance);
 
-    sprintf(query, "SELECT balance FROM Accounts WHERE CPF=%i;", to);
-    res = performQuery(connection, query);
-    balance = atof(mysql_fetch_row(res)[0]);
+    clientInfo = getClientInfo(connection, to);
+    balance = atof(clientInfo["balance"]);
     balance += value;
+    modify(connection, to, "balance", balance);
+}
+
+void Database::loan(MYSQL* connection, int CPF, float value) {
+    map<string, char*> clientInfo;
+    float moneyOwed;
+    float balance;
+
+    clientInfo = getClientInfo(connection, CPF);
+    moneyOwed = atof(clientInfo["moneyOwed"]);
+    balance = atof(clientInfo["balance"]);
+
+    moneyOwed += value;
+    balance += value;
+
+    modify(connection, CPF, "balance", balance);
+    modify(connection, CPF, "moneyOwed", moneyOwed);
+}
+
+void Database::payLoan(MYSQL* connection, int CPF) {
+    map<string, char*> clientInfo;
+    float moneyOwed;
+    float balance;
+
+    clientInfo = getClientInfo(connection, CPF);
+    moneyOwed = atof(clientInfo["moneyOwed"]);
+    balance = atof(clientInfo["balance"]);
+
+    if (moneyOwed > balance)
+        throw runtime_error("Error: You do not have enough money in your account to pay your loan yet.");
+
+    balance -= moneyOwed;
+    moneyOwed = 0;
+
+    modify(connection, CPF, "balance", balance);
+    modify(connection, CPF, "moneyOwed", moneyOwed);
+}
+
+void Database::simulateMonth(MYSQL* connection) {
+    MYSQL_ROW row;
+    MYSQL_RES* res;
+    vector<int> CPFs;
+
+    res = performQuery(connection, "SELECT CPF FROM Accounts;");
+
+    while ((row = mysql_fetch_row(res)) != NULL) {
+        CPFs.push_back(atoi(row[0]));
+    }
+
     mysql_free_result(res);
 
-    modify(connection, to, "balance", balance);
+    for (int CPF: CPFs) {
+        map<string, char*> clientInfo = getClientInfo(connection, CPF);
+
+        float cashInHands = atof(clientInfo["cashInHands"]);
+        float moneyOwed = atof(clientInfo["moneyOwed"]);
+        float salary = atof(clientInfo["salary"]);
+
+        cashInHands = cashInHands + salary;
+        moneyOwed = moneyOwed * interest;
+
+        modify(connection, CPF, "cashInHands", cashInHands);
+        modify(connection, CPF, "moneyOwed", moneyOwed);
+    }
 }
