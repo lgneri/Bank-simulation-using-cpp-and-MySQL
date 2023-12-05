@@ -1,3 +1,6 @@
+/** Arquivo Bank.cpp. Trabalho final EEL670 2022.2
+*   Aluno: Luis Guilherme Neri Ferreira */
+
 #include "Bank.h"
 
 using namespace std;
@@ -23,9 +26,10 @@ bool Bank::login(int CPF, const char* password) {
 }
 
 void Bank::checkBalance(int CPF) {
-    map<string, char*> clientInfo = db.getClientInfo(connection, CPF);
+    map<string, char*> clientInfo;
+    clientInfo = db.getClientInfo(connection, CPF);
 
-    cout << "\nYour account:" << endl
+    cout << "\nYour account:" << endl << endl
          << "Balance: " << clientInfo["balance"] << endl
          << "Money owed: " << clientInfo["moneyOwed"] << endl;
 }
@@ -43,3 +47,14 @@ void Bank::pix(int from, int to, float amount) {
     db.pix(connection, from, to, amount);
 }
 
+void Bank::loan(int CPF, float amount) {
+    db.loan(connection, CPF, amount);
+}
+
+void Bank::payLoan(int CPF) {
+    db.payLoan(connection, CPF);
+}
+
+void Bank::simulateMonth() {
+    db.simulateMonth(connection);
+}
