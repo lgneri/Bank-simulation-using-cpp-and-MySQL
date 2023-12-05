@@ -1,3 +1,6 @@
+/** Arquivo Bank.h. Trabalho final EEL670 2022.2
+*   Aluno: Luis Guilherme Neri Ferreira */
+
 #ifndef BANK_H
 #define BANK_H
 
@@ -22,6 +25,9 @@ class Bank
         void deposit(int, float);
         void withdraw(int, float);
         void pix(int, int, float);
+        void loan(int, float);
+        void payLoan(int);
+        void simulateMonth();
 };
 
 #endif
